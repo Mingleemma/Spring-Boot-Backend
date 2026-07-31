@@ -12,10 +12,12 @@ jobs:
     steps:
       - name: Record build start
         run: |
+          set -e
           echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build started" >> /home/ec2-user/newfile.txt
 
       - name: Update repository
         run: |
+          set -e
           cd /home/ec2-user/Spring-Boot-Backend
           git fetch origin
           git checkout main
@@ -23,12 +25,14 @@ jobs:
 
       - name: Build application
         run: |
+          set -e
           cd /home/ec2-user/Spring-Boot-Backend
           chmod +x mvnw
           ./mvnw clean package
 
       - name: Verify build artifact
         run: |
+          set -e
           JAR=/home/ec2-user/Spring-Boot-Backend/target/demo-0.0.1-SNAPSHOT.jar
           if [ ! -f "$JAR" ]; then
             echo "Build artifact not found: $JAR"
@@ -44,6 +48,7 @@ jobs:
 
       - name: Record build completion
         run: |
+          set -e
           echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build completed" >> /home/ec2-user/newfile.txt
 
   deploy:
@@ -53,10 +58,12 @@ jobs:
     steps:
       - name: Record deployment start
         run: |
+          set -e
           echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment started" >> /home/ec2-user/newfile.txt
 
       - name: Ensure target directory exists
         run: |
+          set -e
           mkdir -p /home/ec2-user/Spring-Boot-Backend/target
 
       - name: Download JAR artifact
@@ -67,6 +74,7 @@ jobs:
 
       - name: Stop existing application
         run: |
+          set -e
           PID=$(pgrep -f "demo-0.0.1-SNAPSHOT.jar" || true)
 
           if [ -n "$PID" ]; then
@@ -79,11 +87,14 @@ jobs:
 
       - name: Start application on port 8090
         run: |
+          set -e
           cd /home/ec2-user/Spring-Boot-Backend
-          nohup java -jar target/demo-0.0.1-SNAPSHOT.jar --server.port=8090 > /home/ec2-user/spring-app.log 2>&1 &
+          nohup setsid env -u RUNNER_TRACKING_ID java -jar target/demo-0.0.1-SNAPSHOT.jar --server.port=8090 > /home/ec2-user/spring-app.log 2>&1 < /dev/null &
+          echo $! > /home/ec2-user/spring-app.pid
 
       - name: Verify application started
         run: |
+          set -e
           for i in {1..20}; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/ || true)
             if [ "$CODE" = "200" ]; then
@@ -100,4 +111,5 @@ jobs:
 
       - name: Record deployment completion
         run: |
+          set -e
           echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment completed" >> /home/ec2-user/newfile.txt
