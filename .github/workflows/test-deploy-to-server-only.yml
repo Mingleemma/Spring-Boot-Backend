@@ -1,0 +1,15 @@
+name: Append Timestamp
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  append-time:
+    runs-on: ['self-hosted', 'project-test']
+
+    steps:
+      - name: Append current timestamp to file
+        run: |
+          echo "$(date '+%Y-%m-%d %H:%M:%S %Z')" >> /home/ec2-user/newfile.txt
