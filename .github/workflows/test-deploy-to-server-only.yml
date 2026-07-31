@@ -7,31 +7,46 @@ on:
 
 jobs:
   deploy:
-    runs-on: ['self-hosted', 'project-test']
+    runs-on: self-hosted
 
     steps:
-      - name: Checkout source
-        uses: actions/checkout@v4
-
-      - name: Append deployment timestamp
+      - name: Record deployment start
         run: |
-          echo "Deployment started: $(date '+%Y-%m-%d %H:%M:%S %Z')" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment started" >> /home/ec2-user/newfile.txt
+
+      - name: Update repository
+        run: |
+          cd /home/ec2-user/Spring-Boot-Backend
+          git fetch origin
+          git checkout main
+          git pull origin main
 
       - name: Build application
         run: |
+          cd /home/ec2-user/Spring-Boot-Backend
           chmod +x mvnw
           ./mvnw clean package -DskipTests
 
       - name: Stop existing application
         run: |
-          pkill -f 'java.*jar' || true
+          PID=$(pgrep -f "demo-0.0.1-SNAPSHOT.jar" || true)
+
+          if [ -n "$PID" ]; then
+            echo "Stopping application (PID: $PID)"
+            kill "$PID"
+            sleep 10
+          else
+            echo "No running application found."
+          fi
 
       - name: Start application on port 8090
         run: |
-          nohup java -jar target/*.jar \
+          cd /home/ec2-user/Spring-Boot-Backend
+
+          nohup java -jar target/demo-0.0.1-SNAPSHOT.jar \
             --server.port=8090 \
             > /home/ec2-user/spring-app.log 2>&1 &
 
-      - name: Record deployment success
+      - name: Record deployment completion
         run: |
-          echo "Deployment completed: $(date '+%Y-%m-%d %H:%M:%S %Z')" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment completed" >> /home/ec2-user/newfile.txt
