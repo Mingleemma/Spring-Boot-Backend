@@ -6,13 +6,13 @@ on:
       - main
 
 jobs:
-  deploy:
+  build:
     runs-on: self-hosted
 
     steps:
-      - name: Record deployment start
+      - name: Record build start
         run: |
-          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment started" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build started" >> /home/ec2-user/newfile.txt
 
       - name: Update repository
         run: |
@@ -25,7 +25,45 @@ jobs:
         run: |
           cd /home/ec2-user/Spring-Boot-Backend
           chmod +x mvnw
-          ./mvnw clean package -DskipTests
+          ./mvnw clean package
+
+      - name: Verify build artifact
+        run: |
+          JAR=/home/ec2-user/Spring-Boot-Backend/target/demo-0.0.1-SNAPSHOT.jar
+          if [ ! -f "$JAR" ]; then
+            echo "Build artifact not found: $JAR"
+            exit 1
+          fi
+          ls -lh "$JAR"
+
+      - name: Upload JAR artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: spring-boot-jar
+          path: /home/ec2-user/Spring-Boot-Backend/target/demo-0.0.1-SNAPSHOT.jar
+
+      - name: Record build completion
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build completed" >> /home/ec2-user/newfile.txt
+
+  deploy:
+    runs-on: self-hosted
+    needs: build
+
+    steps:
+      - name: Record deployment start
+        run: |
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment started" >> /home/ec2-user/newfile.txt
+
+      - name: Ensure target directory exists
+        run: |
+          mkdir -p /home/ec2-user/Spring-Boot-Backend/target
+
+      - name: Download JAR artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: spring-boot-jar
+          path: /home/ec2-user/Spring-Boot-Backend/target
 
       - name: Stop existing application
         run: |
@@ -43,6 +81,22 @@ jobs:
         run: |
           cd /home/ec2-user/Spring-Boot-Backend
           nohup java -jar target/demo-0.0.1-SNAPSHOT.jar --server.port=8090 > /home/ec2-user/spring-app.log 2>&1 &
+
+      - name: Verify application started
+        run: |
+          for i in {1..20}; do
+            CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/ || true)
+            if [ "$CODE" = "200" ]; then
+              echo "Application is up on port 8090."
+              exit 0
+            fi
+            echo "Waiting for app startup... attempt $i (status: $CODE)"
+            sleep 2
+          done
+
+          echo "Application failed to start. Last logs:"
+          tail -n 200 /home/ec2-user/spring-app.log || true
+          exit 1
 
       - name: Record deployment completion
         run: |
