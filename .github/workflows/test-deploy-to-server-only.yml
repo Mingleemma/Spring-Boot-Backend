@@ -1,4 +1,4 @@
-name: Append Timestamp
+name: Build and Deploy Spring Boot
 
 on:
   push:
@@ -6,10 +6,32 @@ on:
       - main
 
 jobs:
-  append-time:
-    runs-on: ['self-hosted', 'project-test']
+  deploy:
+    runs-on: self-hosted
 
     steps:
-      - name: Append current timestamp to file
+      - name: Checkout source
+        uses: actions/checkout@v4
+
+      - name: Append deployment timestamp
         run: |
-          echo "$(date '+%Y-%m-%d %H:%M:%S %Z')" >> /home/ec2-user/newfile.txt
+          echo "Deployment started: $(date '+%Y-%m-%d %H:%M:%S %Z')" >> /home/ec2-user/newfile.txt
+
+      - name: Build application
+        run: |
+          chmod +x mvnw
+          ./mvnw clean package -DskipTests
+
+      - name: Stop existing application
+        run: |
+          pkill -f 'java.*jar' || true
+
+      - name: Start application on port 8090
+        run: |
+          nohup java -jar target/*.jar \
+            --server.port=8090 \
+            > /home/ec2-user/spring-app.log 2>&1 &
+
+      - name: Record deployment success
+        run: |
+          echo "Deployment completed: $(date '+%Y-%m-%d %H:%M:%S %Z')" >> /home/ec2-user/newfile.txt
