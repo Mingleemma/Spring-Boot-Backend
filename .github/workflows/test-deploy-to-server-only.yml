@@ -13,6 +13,9 @@ jobs:
       - name: Record build start
         run: |
           set -e
+          BUILD_START=$(date +%s)
+          echo "$BUILD_START" > /tmp/build-timer.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] ========================================" >> /home/ec2-user/newfile.txt
           echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build started" >> /home/ec2-user/newfile.txt
 
       - name: Update repository
@@ -22,6 +25,17 @@ jobs:
           git fetch origin
           git checkout main
           git pull origin main
+
+      - name: Capture commit info
+        run: |
+          set -e
+          cd /home/ec2-user/Spring-Boot-Backend
+          COMMIT_HASH=$(git rev-parse HEAD | cut -c1-8)
+          COMMIT_AUTHOR=$(git log -1 --pretty=%an)
+          COMMIT_MSG=$(git log -1 --pretty=%B | head -1)
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Commit Hash: $COMMIT_HASH" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Author: $COMMIT_AUTHOR" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Message: $COMMIT_MSG" >> /home/ec2-user/newfile.txt
 
       - name: Build application
         run: |
@@ -49,7 +63,12 @@ jobs:
       - name: Record build completion
         run: |
           set -e
-          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build completed" >> /home/ec2-user/newfile.txt
+          BUILD_END=$(date +%s)
+          BUILD_START=$(cat /tmp/build-timer.txt)
+          BUILD_DURATION=$((BUILD_END - BUILD_START))
+          JAR_SIZE=$(ls -lh /home/ec2-user/Spring-Boot-Backend/target/demo-0.0.1-SNAPSHOT.jar | awk '{print $5}')
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Build completed in ${BUILD_DURATION}s" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] JAR Size: $JAR_SIZE" >> /home/ec2-user/newfile.txt
 
   deploy:
     runs-on: self-hosted
@@ -59,6 +78,9 @@ jobs:
       - name: Record deployment start
         run: |
           set -e
+          DEPLOY_START=$(date +%s)
+          echo "$DEPLOY_START" > /tmp/deploy-timer.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] ========================================" >> /home/ec2-user/newfile.txt
           echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment started" >> /home/ec2-user/newfile.txt
 
       - name: Ensure target directory exists
@@ -78,19 +100,23 @@ jobs:
           PID=$(pgrep -f "demo-0.0.1-SNAPSHOT.jar" || true)
 
           if [ -n "$PID" ]; then
-            echo "Stopping application (PID: $PID)"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Stopping application (PID: $PID)" >> /home/ec2-user/newfile.txt
             kill "$PID"
             sleep 10
+            echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Old application stopped" >> /home/ec2-user/newfile.txt
           else
-            echo "No running application found."
+            echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] No running application found" >> /home/ec2-user/newfile.txt
           fi
 
       - name: Start application on port 8090
         run: |
           set -e
           cd /home/ec2-user/Spring-Boot-Backend
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Starting new application..." >> /home/ec2-user/newfile.txt
           nohup setsid env -u RUNNER_TRACKING_ID java -jar target/demo-0.0.1-SNAPSHOT.jar --server.port=8090 > /home/ec2-user/spring-app.log 2>&1 < /dev/null &
-          echo $! > /home/ec2-user/spring-app.pid
+          APP_PID=$!
+          echo $APP_PID > /home/ec2-user/spring-app.pid
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Application started with PID: $APP_PID" >> /home/ec2-user/newfile.txt
 
       - name: Verify application started
         run: |
@@ -98,18 +124,23 @@ jobs:
           for i in {1..20}; do
             CODE=$(curl -s -o /dev/null -w "%{http_code}" http://127.0.0.1:8090/ || true)
             if [ "$CODE" = "200" ]; then
-              echo "Application is up on port 8090."
+              echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] ✓ Application is UP on port 8090 (attempt $i/20)" >> /home/ec2-user/newfile.txt
               exit 0
             fi
-            echo "Waiting for app startup... attempt $i (status: $CODE)"
+            echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Waiting for app startup... attempt $i/20 (HTTP $CODE)" >> /home/ec2-user/newfile.txt
             sleep 2
           done
 
-          echo "Application failed to start. Last logs:"
-          tail -n 200 /home/ec2-user/spring-app.log || true
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] ✗ Application failed to start after 20 attempts" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Last 50 lines of application log:" >> /home/ec2-user/newfile.txt
+          tail -n 50 /home/ec2-user/spring-app.log >> /home/ec2-user/newfile.txt 2>&1 || true
           exit 1
 
       - name: Record deployment completion
         run: |
           set -e
-          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment completed" >> /home/ec2-user/newfile.txt
+          DEPLOY_END=$(date +%s)
+          DEPLOY_START=$(cat /tmp/deploy-timer.txt)
+          DEPLOY_DURATION=$((DEPLOY_END - DEPLOY_START))
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] Deployment completed in ${DEPLOY_DURATION}s" >> /home/ec2-user/newfile.txt
+          echo "[$(date '+%Y-%m-%d %H:%M:%S %Z')] ========================================" >> /home/ec2-user/newfile.txt
