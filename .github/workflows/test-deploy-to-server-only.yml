@@ -42,10 +42,7 @@ jobs:
       - name: Start application on port 8090
         run: |
           cd /home/ec2-user/Spring-Boot-Backend
-
-          nohup java -jar target/demo-0.0.1-SNAPSHOT.jar \
-            --server.port=8090 \
-            > /home/ec2-user/spring-app.log 2>&1 &
+          nohup java -jar target/demo-0.0.1-SNAPSHOT.jar --server.port=8090 > /home/ec2-user/spring-app.log 2>&1 &
 
       - name: Record deployment completion
         run: |
